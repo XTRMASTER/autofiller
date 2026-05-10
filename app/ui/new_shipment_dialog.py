@@ -49,6 +49,12 @@ class NewShipmentDialog(ctk.CTkToplevel):
         ctk.CTkButton(btn_frame, text="OK", command=self.on_ok).pack(side="left", padx=5)
         ctk.CTkButton(btn_frame, text="Cancel", command=self.destroy, fg_color="gray").pack(side="left", padx=5)
 
+        self.empty_label = ctk.CTkLabel(
+            self.scrollable_frame,
+            text="⚠️ No templates linked to this shipping line.\nGo to Shipping Lines -> Manage Documents to add some.",
+            text_color="#FFA500",
+            font=("Arial", 12, "bold")
+        )
         self.checkboxes = []
 
         # Load initially if available
@@ -62,6 +68,12 @@ class NewShipmentDialog(ctk.CTkToplevel):
         # clear existing
         for cb, _ in self.checkboxes:
             cb.destroy()
+        self.empty_label = ctk.CTkLabel(
+            self.scrollable_frame,
+            text="⚠️ No templates linked to this shipping line.\nGo to Shipping Lines -> Manage Documents to add some.",
+            text_color="#FFA500",
+            font=("Arial", 12, "bold")
+        )
         self.checkboxes = []
 
         for i, t in enumerate(templates):
