@@ -1,106 +1,92 @@
 import json
 from datetime import datetime
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-    QListWidget, QLabel, QInputDialog, QMessageBox, QTabWidget
-)
-from app.core.database import DatabaseManager
-from app.core.variable_manager import VariableManager
+import customtkinter as ctk
+import tkinter as tk
+from tkinter import messagebox
 
-class PresetsPanel(QWidget):
-    def __init__(self, db: DatabaseManager, var_manager: VariableManager, parent=None):
-        super().__init__(parent)
+class PresetsPanel(ctk.CTkFrame):
+    def __init__(self, master, db, var_manager, parent_window=None):
+        super().__init__(master)
         self.db = db
         self.var_manager = var_manager
+        self.parent_window = parent_window
+
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
         self.init_ui()
         self.refresh_lists()
 
     def init_ui(self):
-        main_layout = QVBoxLayout(self)
+        self.tabs = ctk.CTkTabview(self)
+        self.tabs.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
 
-        self.tabs = QTabWidget()
+        self.tabs.add("Master Data")
+        self.tabs.add("Jobs")
 
-        # Tab 1: Master Data (Shipping Lines & Customers)
-        master_tab = QWidget()
-        master_layout = QHBoxLayout(master_tab)
+        # --- Master Data Tab ---
+        tab1 = self.tabs.tab("Master Data")
+        tab1.grid_columnconfigure((0, 1), weight=1)
+        tab1.grid_rowconfigure(1, weight=1)
 
-        # Shipping Lines
-        sl_layout = QVBoxLayout()
-        sl_layout.addWidget(QLabel("Shipping Lines:"))
-        self.sl_list = QListWidget()
-        sl_layout.addWidget(self.sl_list)
+        ctk.CTkLabel(tab1, text="Shipping Lines:").grid(row=0, column=0, sticky="w")
+        self.sl_list = tk.Listbox(tab1, bg="#2b2b2b", fg="white", selectbackground="#1f538d", borderwidth=0, highlightthickness=0)
+        self.sl_list.grid(row=1, column=0, sticky="nsew", padx=2)
 
-        self.add_sl_btn = QPushButton("Add Shipping Line")
-        self.add_sl_btn.clicked.connect(self.add_shipping_line)
-        sl_layout.addWidget(self.add_sl_btn)
+        ctk.CTkLabel(tab1, text="Customers:").grid(row=0, column=1, sticky="w")
+        self.cust_list = tk.Listbox(tab1, bg="#2b2b2b", fg="white", selectbackground="#1f538d", borderwidth=0, highlightthickness=0)
+        self.cust_list.grid(row=1, column=1, sticky="nsew", padx=2)
 
-        self.load_sl_btn = QPushButton("Load Variables")
-        self.load_sl_btn.clicked.connect(self.load_shipping_line)
-        sl_layout.addWidget(self.load_sl_btn)
+        btn_frame1 = ctk.CTkFrame(tab1, fg_color="transparent")
+        btn_frame1.grid(row=2, column=0, pady=5)
+        ctk.CTkButton(btn_frame1, text="+ Add", command=self.add_shipping_line, width=60).pack(side="left", padx=2)
+        ctk.CTkButton(btn_frame1, text="Load", command=self.load_shipping_line, width=60).pack(side="left", padx=2)
 
-        master_layout.addLayout(sl_layout)
+        btn_frame2 = ctk.CTkFrame(tab1, fg_color="transparent")
+        btn_frame2.grid(row=2, column=1, pady=5)
+        ctk.CTkButton(btn_frame2, text="+ Add", command=self.add_customer, width=60).pack(side="left", padx=2)
+        ctk.CTkButton(btn_frame2, text="Load", command=self.load_customer, width=60).pack(side="left", padx=2)
 
-        # Customers
-        cust_layout = QVBoxLayout()
-        cust_layout.addWidget(QLabel("Customers:"))
-        self.cust_list = QListWidget()
-        cust_layout.addWidget(self.cust_list)
+        # --- Jobs Tab ---
+        tab2 = self.tabs.tab("Jobs")
+        tab2.grid_columnconfigure(0, weight=1)
+        tab2.grid_rowconfigure(1, weight=1)
 
-        self.add_cust_btn = QPushButton("Add Customer")
-        self.add_cust_btn.clicked.connect(self.add_customer)
-        cust_layout.addWidget(self.add_cust_btn)
+        ctk.CTkLabel(tab2, text="Saved Jobs (Shipments):").grid(row=0, column=0, sticky="w")
+        self.jobs_list = tk.Listbox(tab2, bg="#2b2b2b", fg="white", selectbackground="#1f538d", borderwidth=0, highlightthickness=0)
+        self.jobs_list.grid(row=1, column=0, sticky="nsew", pady=2)
 
-        self.load_cust_btn = QPushButton("Load Variables")
-        self.load_cust_btn.clicked.connect(self.load_customer)
-        cust_layout.addWidget(self.load_cust_btn)
-
-        master_layout.addLayout(cust_layout)
-        self.tabs.addTab(master_tab, "Master Data")
-
-        # Tab 2: Jobs (Shipment Presets)
-        jobs_tab = QWidget()
-        jobs_layout = QVBoxLayout(jobs_tab)
-
-        jobs_layout.addWidget(QLabel("Saved Jobs (Shipments):"))
-        self.jobs_list = QListWidget()
-        jobs_layout.addWidget(self.jobs_list)
-
-        btn_layout = QHBoxLayout()
-        self.add_job_btn = QPushButton("Save Current State as Job")
-        self.add_job_btn.clicked.connect(self.add_job)
-        btn_layout.addWidget(self.add_job_btn)
-
-        self.load_job_btn = QPushButton("Load Job Variables")
-        self.load_job_btn.clicked.connect(self.load_job)
-        btn_layout.addWidget(self.load_job_btn)
-
-        jobs_layout.addLayout(btn_layout)
-        self.tabs.addTab(jobs_tab, "Jobs")
-
-        main_layout.addWidget(self.tabs)
+        btn_frame3 = ctk.CTkFrame(tab2, fg_color="transparent")
+        btn_frame3.grid(row=2, column=0, pady=5)
+        ctk.CTkButton(btn_frame3, text="Save Job", command=self.add_job).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame3, text="Load Job", command=self.load_job).pack(side="left", padx=5)
 
     def refresh_lists(self):
-        self.sl_list.clear()
-        self.cust_list.clear()
-        self.jobs_list.clear()
+        self.sl_list.delete(0, 'end')
+        self.cust_list.delete(0, 'end')
+        self.jobs_list.delete(0, 'end')
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT id, name FROM shipping_lines")
             for row in cursor.fetchall():
-                self.sl_list.addItem(f"{row[0]} - {row[1]}")
+                self.sl_list.insert('end', f"{row[0]} - {row[1]}")
 
             cursor.execute("SELECT id, name FROM customers")
             for row in cursor.fetchall():
-                self.cust_list.addItem(f"{row[0]} - {row[1]}")
+                self.cust_list.insert('end', f"{row[0]} - {row[1]}")
 
             cursor.execute("SELECT id, job_name, job_date FROM jobs")
             for row in cursor.fetchall():
-                self.jobs_list.addItem(f"{row[0]} - {row[1]} ({row[2]})")
+                self.jobs_list.insert('end', f"{row[0]} - {row[1]} ({row[2]})")
+
+    def simple_input(self, title, prompt):
+        dialog = ctk.CTkInputDialog(text=prompt, title=title)
+        return dialog.get_input()
 
     def add_shipping_line(self):
-        name, ok = QInputDialog.getText(self, "Add Shipping Line", "Enter name:")
-        if ok and name:
+        name = self.simple_input("Add Shipping Line", "Enter name:")
+        if name:
             current_vars = {v.name: v.value for v in self.var_manager.get_all_variables() if v.category == "Shipping Line"}
             with self.db.get_connection() as conn:
                 cursor = conn.cursor()
@@ -112,8 +98,8 @@ class PresetsPanel(QWidget):
             self.refresh_lists()
 
     def add_customer(self):
-        name, ok = QInputDialog.getText(self, "Add Customer", "Enter name:")
-        if ok and name:
+        name = self.simple_input("Add Customer", "Enter name:")
+        if name:
             current_vars = {v.name: v.value for v in self.var_manager.get_all_variables() if v.category == "Customer/GST"}
             with self.db.get_connection() as conn:
                 cursor = conn.cursor()
@@ -125,9 +111,8 @@ class PresetsPanel(QWidget):
             self.refresh_lists()
 
     def add_job(self):
-        name, ok = QInputDialog.getText(self, "Save Job", "Enter Job ID/Name:")
-        if ok and name:
-            # Snapshot all variables
+        name = self.simple_input("Save Job", "Enter Job ID/Name:")
+        if name:
             current_vars = {v.name: v.value for v in self.var_manager.get_all_variables()}
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             with self.db.get_connection() as conn:
@@ -139,11 +124,13 @@ class PresetsPanel(QWidget):
                 conn.commit()
             self.refresh_lists()
 
-    def load_preset(self, table, list_widget, col_name):
-        item = list_widget.currentItem()
-        if not item: return
+    def load_preset(self, table, listbox, col_name):
+        selection = listbox.curselection()
+        if not selection: return
 
-        preset_id = int(item.text().split(' - ')[0])
+        item_text = listbox.get(selection[0])
+        preset_id = int(item_text.split(' - ')[0])
+
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(f"SELECT {col_name} FROM {table} WHERE id=?", (preset_id,))
@@ -154,12 +141,10 @@ class PresetsPanel(QWidget):
                     var = self.var_manager.find_variable_by_name(name)
                     if var:
                         self.var_manager.update_variable_value(var.id, value)
-                QMessageBox.information(self, "Success", "Loaded variables.")
+                messagebox.showinfo("Success", "Loaded variables.")
 
-                # Signal main window to refresh panel if parent exposes it
-                parent_win = self.window()
-                if hasattr(parent_win, 'var_panel'):
-                    parent_win.var_panel.refresh_tree()
+                if self.parent_window and hasattr(self.parent_window, 'var_panel'):
+                    self.parent_window.var_panel.refresh_tree()
 
     def load_shipping_line(self):
         self.load_preset("shipping_lines", self.sl_list, "variables_json")

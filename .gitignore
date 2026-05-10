@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environments
+venv/
+.env
+
+# Database
+*.db
+*.sqlite3
+
+# Test outputs
+test_doc.docx
+test_doc.xlsx

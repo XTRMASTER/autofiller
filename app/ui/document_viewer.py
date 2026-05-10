@@ -1,138 +1,127 @@
-import os
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
-    QTableWidget, QTableWidgetItem, QSplitter,
-    QLabel, QPushButton, QListWidget, QListWidgetItem,
-    QFileDialog, QMessageBox
-)
-from PyQt6.QtCore import Qt
-from app.core.document_processor import DocumentProcessor
+import customtkinter as ctk
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
 from app.ui.extractor_dialog import ExtractorDialog
 
-class DocumentViewer(QWidget):
-    def __init__(self, doc_processor: DocumentProcessor, parent=None):
-        super().__init__(parent)
+class DocumentViewer(ctk.CTkFrame):
+    def __init__(self, master, doc_processor, parent_window=None):
+        super().__init__(master)
         self.doc_processor = doc_processor
+        self.parent_window = parent_window
         self.current_template = None
+
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=3)
+        self.grid_columnconfigure(1, weight=1)
+
         self.init_ui()
 
     def init_ui(self):
-        main_layout = QHBoxLayout()
+        # Left Panel: Doc Viewer
+        self.viewer_frame = ctk.CTkFrame(self)
+        self.viewer_frame.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        self.viewer_frame.grid_rowconfigure(1, weight=1)
+        self.viewer_frame.grid_columnconfigure(0, weight=1)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.doc_label = ctk.CTkLabel(self.viewer_frame, text="No document loaded.")
+        self.doc_label.grid(row=0, column=0, pady=5, padx=5, sticky="w")
 
-        # Center Panel: Document View
-        doc_panel = QWidget()
-        doc_layout = QVBoxLayout(doc_panel)
+        self.word_view = ctk.CTkTextbox(self.viewer_frame, wrap="word")
+        self.word_view.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        self.word_view.grid_remove() # hide initially
 
-        self.doc_label = QLabel("No document loaded.")
-        doc_layout.addWidget(self.doc_label)
+        self.excel_view = ttk.Treeview(self.viewer_frame, columns=("Sheet", "Cell", "Value"), show="headings")
+        self.excel_view.heading("Sheet", text="Sheet")
+        self.excel_view.heading("Cell", text="Cell")
+        self.excel_view.heading("Value", text="Value")
+        self.excel_view.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        self.excel_view.grid_remove() # hide initially
 
-        self.word_view = QTextEdit()
-        self.word_view.setReadOnly(True)
-        self.word_view.hide()
-        doc_layout.addWidget(self.word_view)
+        # Right Panel: Links
+        self.links_frame = ctk.CTkFrame(self)
+        self.links_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
+        self.links_frame.grid_rowconfigure(1, weight=1)
+        self.links_frame.grid_columnconfigure(0, weight=1)
 
-        self.excel_view = QTableWidget()
-        self.excel_view.hide()
-        doc_layout.addWidget(self.excel_view)
+        ctk.CTkLabel(self.links_frame, text="Linked Variables:").grid(row=0, column=0, pady=5, sticky="w")
 
-        splitter.addWidget(doc_panel)
+        self.link_list = tk.Listbox(self.links_frame, bg="#2b2b2b", fg="white", borderwidth=0, highlightthickness=0)
+        self.link_list.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
 
-        # Right Panel: Linked Variables & Actions
-        right_panel = QWidget()
-        right_layout = QVBoxLayout(right_panel)
+        self.extract_btn = ctk.CTkButton(self.links_frame, text="Extract Values", command=self.extract_values, state="disabled")
+        self.extract_btn.grid(row=2, column=0, pady=5, padx=5, sticky="ew")
 
-        right_layout.addWidget(QLabel("Linked Variables:"))
-        self.link_list = QListWidget()
-        right_layout.addWidget(self.link_list)
+        self.apply_btn = ctk.CTkButton(self.links_frame, text="Apply Variables & Save", command=self.apply_variables, state="disabled")
+        self.apply_btn.grid(row=3, column=0, pady=10, padx=5, sticky="ew")
 
-        self.extract_btn = QPushButton("Extract Values from Text")
-        self.extract_btn.clicked.connect(self.extract_values)
-        self.extract_btn.setEnabled(False)
-        right_layout.addWidget(self.extract_btn)
-
-        self.apply_btn = QPushButton("Apply Variables & Save")
-        self.apply_btn.clicked.connect(self.apply_variables)
-        self.apply_btn.setEnabled(False)
-        right_layout.addWidget(self.apply_btn)
-
-        splitter.addWidget(right_panel)
-        splitter.setSizes([700, 300])
-
-        main_layout.addWidget(splitter)
-        self.setLayout(main_layout)
-
-    def load_document(self, filepath: str):
+    def load_document(self, filepath):
         try:
             template, content = self.doc_processor.process_document(filepath)
             self.current_template = template
+            self.doc_label.configure(text=f"Document: {template.file_name}")
 
-            self.doc_label.setText(f"Document: {template.file_name}")
-
-            # Auto link
             links = self.doc_processor.auto_link_variables(template.id, content)
 
-            # Update UI
             if template.file_type == '.docx':
                 self.show_word_view(content, links)
             elif template.file_type == '.xlsx':
                 self.show_excel_view(content, links)
 
             self.refresh_links_list()
-            self.apply_btn.setEnabled(True)
-            self.extract_btn.setEnabled(True)
+            self.apply_btn.configure(state="normal")
+            self.extract_btn.configure(state="normal")
 
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to load document:\n{e}")
+            messagebox.showerror("Error", f"Failed to load document:\n{e}")
 
     def show_word_view(self, content, links):
-        self.excel_view.hide()
-        self.word_view.show()
+        self.excel_view.grid_remove()
+        self.word_view.grid()
+        self.word_view.configure(state="normal")
+        self.word_view.delete("1.0", "end")
 
-        # Simple HTML render to highlight matched text
-        html = ""
         link_texts = [l.match_text for l in links]
 
         for item in content:
             text = item.get('text', '')
-            for lt in link_texts:
-                if lt in text:
-                    text = text.replace(lt, f"<span style='background-color: yellow;'>{lt}</span>")
-            html += f"<p>{text}</p>"
+            self.word_view.insert("end", text + "\n\n")
 
-        self.word_view.setHtml(html)
+        # Highlight tags
+        self.word_view.tag_config("highlight", background="yellow", foreground="black")
+
+        # Simple string matching highlight
+        content_text = self.word_view.get("1.0", "end")
+        for lt in link_texts:
+            start_idx = "1.0"
+            while True:
+                start_idx = self.word_view.search(lt, start_idx, stopindex="end")
+                if not start_idx: break
+                end_idx = f"{start_idx}+{len(lt)}c"
+                self.word_view.tag_add("highlight", start_idx, end_idx)
+                start_idx = end_idx
+
+        self.word_view.configure(state="disabled")
 
     def show_excel_view(self, content, links):
-        self.word_view.hide()
-        self.excel_view.show()
-        self.excel_view.clear()
+        self.word_view.grid_remove()
+        self.excel_view.grid()
 
-        # Simple list view of cells with content for MVP
-        self.excel_view.setColumnCount(3)
-        self.excel_view.setHorizontalHeaderLabels(["Sheet", "Cell", "Value"])
-        self.excel_view.setRowCount(len(content))
+        for item in self.excel_view.get_children():
+            self.excel_view.delete(item)
 
         link_texts = [l.match_text for l in links]
 
-        for i, item in enumerate(content):
-            self.excel_view.setItem(i, 0, QTableWidgetItem(item.get('sheet', '')))
-            self.excel_view.setItem(i, 1, QTableWidgetItem(item.get('address', '')))
+        for item in content:
+            text = item.get('text', '')
+            is_match = any(lt in text for lt in link_texts)
 
-            val_item = QTableWidgetItem(item.get('text', ''))
+            tags = ("match",) if is_match else ()
+            self.excel_view.insert("", "end", values=(item.get('sheet', ''), item.get('address', ''), text), tags=tags)
 
-            # Highlight if matched
-            for lt in link_texts:
-                if lt in item.get('text', ''):
-                    val_item.setBackground(Qt.GlobalColor.yellow)
-                    break
-
-            self.excel_view.setItem(i, 2, val_item)
-
-        self.excel_view.resizeColumnsToContents()
+        self.excel_view.tag_configure("match", background="yellow", foreground="black")
 
     def refresh_links_list(self):
-        self.link_list.clear()
+        self.link_list.delete(0, 'end')
         if not self.current_template: return
 
         links = self.doc_processor.db.get_links_for_template(self.current_template.id)
@@ -141,41 +130,35 @@ class DocumentViewer(QWidget):
         for link in links:
             if link.variable_id in variables:
                 var = variables[link.variable_id]
-                item = QListWidgetItem(f"{var.display_name}: {var.value}")
-                self.link_list.addItem(item)
-
-    def apply_variables(self):
-        if not self.current_template: return
-
-        output_dir = QFileDialog.getExistingDirectory(self, "Select Output Directory")
-        if not output_dir: return
-
-        try:
-            out_path = self.doc_processor.apply_variables_to_template(self.current_template.id, output_dir)
-            QMessageBox.information(self, "Success", f"Document saved to:\n{out_path}")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to apply variables:\n{e}")
+                self.link_list.insert('end', f"{var.display_name}: {var.value}")
 
     def extract_values(self):
         if not self.current_template: return
 
-        # Get raw text from the view based on file type
         text = ""
         if self.current_template.file_type == '.docx':
-            text = self.word_view.toPlainText()
+            text = self.word_view.get("1.0", "end")
         elif self.current_template.file_type == '.xlsx':
-            for r in range(self.excel_view.rowCount()):
-                item = self.excel_view.item(r, 2)
-                if item: text += item.text() + " "
+            for item in self.excel_view.get_children():
+                text += str(self.excel_view.item(item, "values")[2]) + " "
 
-        if not text: return
+        if not text.strip(): return
 
-        # Pass the var manager from main_window via parent chain
-        var_manager = self.window().var_manager
+        dialog = ExtractorDialog(text, self.parent_window.var_manager, self.winfo_toplevel())
+        self.wait_window(dialog)
 
-        dialog = ExtractorDialog(text, var_manager, self)
-        dialog.exec()
-
-        # Refresh parent var panel if variable added
-        self.window().var_panel.refresh_tree()
+        if self.parent_window and hasattr(self.parent_window, 'var_panel'):
+            self.parent_window.var_panel.refresh_tree()
         self.refresh_links_list()
+
+    def apply_variables(self):
+        if not self.current_template: return
+
+        output_dir = filedialog.askdirectory(title="Select Output Directory")
+        if not output_dir: return
+
+        try:
+            out_path = self.doc_processor.apply_variables_to_template(self.current_template.id, output_dir)
+            messagebox.showinfo("Success", f"Document saved to:\n{out_path}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to apply variables:\n{e}")
