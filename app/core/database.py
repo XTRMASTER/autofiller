@@ -3,7 +3,7 @@ import json
 from datetime import datetime
 from typing import List, Optional
 from app.utils.constants import DB_FILE
-from app.models.data_models import Variable, Template, Link, Job
+from app.models.data_models import Variable, Template, Link, Job, ShippingLine
 
 class DatabaseManager:
     def __init__(self, db_path: str = DB_FILE):
@@ -37,7 +37,8 @@ class DatabaseManager:
                 gstin TEXT,
                 contact TEXT,
                 email TEXT,
-                variables_json TEXT
+                variables_json TEXT,
+                created_at TIMESTAMP
             )
             """)
             cursor.execute("""
@@ -51,15 +52,24 @@ class DatabaseManager:
                 variables_json TEXT
             )
             """)
+            # Note: We add shipping_line_id to document_templates
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS document_templates (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 file_path TEXT,
                 file_name TEXT,
                 file_type TEXT,
-                linked_variables_json TEXT
+                shipping_line_id INTEGER,
+                linked_variables_json TEXT,
+                FOREIGN KEY (shipping_line_id) REFERENCES shipping_lines(id)
             )
             """)
+            # Check if shipping_line_id exists in document_templates (for migration)
+            cursor.execute("PRAGMA table_info(document_templates)")
+            columns = [info[1] for info in cursor.fetchall()]
+            if 'shipping_line_id' not in columns:
+                cursor.execute("ALTER TABLE document_templates ADD COLUMN shipping_line_id INTEGER REFERENCES shipping_lines(id)")
+
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS links (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,16 +83,36 @@ class DatabaseManager:
                 FOREIGN KEY (variable_id) REFERENCES variables(id)
             )
             """)
+
+            # Note: jobs table needs shipping_line_id and selected_templates_json
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS jobs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 job_name TEXT,
+                shipping_line_id INTEGER,
+                selected_templates_json TEXT,
+                variables_snapshot_json TEXT,
                 job_date TEXT,
-                variables_snapshot_json TEXT
+                FOREIGN KEY (shipping_line_id) REFERENCES shipping_lines(id)
             )
             """)
+            # Check for migration in jobs
+            cursor.execute("PRAGMA table_info(jobs)")
+            columns = [info[1] for info in cursor.fetchall()]
+            if 'shipping_line_id' not in columns:
+                cursor.execute("ALTER TABLE jobs ADD COLUMN shipping_line_id INTEGER REFERENCES shipping_lines(id)")
+            if 'selected_templates_json' not in columns:
+                cursor.execute("ALTER TABLE jobs ADD COLUMN selected_templates_json TEXT DEFAULT '[]'")
+
+            # check for migration in shipping_lines
+            cursor.execute("PRAGMA table_info(shipping_lines)")
+            columns = [info[1] for info in cursor.fetchall()]
+            if 'created_at' not in columns:
+                cursor.execute("ALTER TABLE shipping_lines ADD COLUMN created_at TIMESTAMP")
+
             conn.commit()
 
+    # --- Variables ---
     def create_variable(self, variable: Variable) -> int:
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -121,23 +151,35 @@ class DatabaseManager:
             cursor.execute("DELETE FROM links WHERE variable_id=?", (variable_id,))
             conn.commit()
 
+    # --- Templates ---
     def add_template(self, template: Template) -> int:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO document_templates (file_path, file_name, file_type, linked_variables_json)
-                VALUES (?, ?, ?, ?)
-            """, (template.file_path, template.file_name, template.file_type, template.linked_variables_json))
+                INSERT INTO document_templates (file_path, file_name, file_type, shipping_line_id, linked_variables_json)
+                VALUES (?, ?, ?, ?, ?)
+            """, (template.file_path, template.file_name, template.file_type, template.shipping_line_id, template.linked_variables_json))
             conn.commit()
             return cursor.lastrowid
 
-    def get_templates(self) -> List[Template]:
+    def get_templates(self, shipping_line_id: Optional[int] = None) -> List[Template]:
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM document_templates")
+            if shipping_line_id is not None:
+                cursor.execute("SELECT id, file_path, file_name, file_type, shipping_line_id, linked_variables_json FROM document_templates WHERE shipping_line_id=?", (shipping_line_id,))
+            else:
+                cursor.execute("SELECT id, file_path, file_name, file_type, shipping_line_id, linked_variables_json FROM document_templates")
             rows = cursor.fetchall()
-            return [Template(id=row[0], file_path=row[1], file_name=row[2], file_type=row[3], linked_variables_json=row[4]) for row in rows]
+            return [Template(id=row[0], file_path=row[1], file_name=row[2], file_type=row[3], shipping_line_id=row[4], linked_variables_json=row[5]) for row in rows]
 
+    def delete_template(self, template_id: int):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM document_templates WHERE id=?", (template_id,))
+            cursor.execute("DELETE FROM links WHERE template_id=?", (template_id,))
+            conn.commit()
+
+    # --- Links ---
     def create_link(self, link: Link) -> int:
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -159,4 +201,39 @@ class DatabaseManager:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM links WHERE id=?", (link_id,))
+            conn.commit()
+
+    # --- Shipping Lines ---
+    def get_shipping_lines(self) -> List[ShippingLine]:
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, name, code, contact, email, gstin, address, variables_json, created_at FROM shipping_lines")
+            rows = cursor.fetchall()
+            return [ShippingLine(id=row[0], name=row[1], code=row[2], contact=row[3], email=row[4], gstin=row[5], address=row[6], variables_json=row[7], created_at=row[8]) for row in rows]
+
+    def add_shipping_line(self, sl: ShippingLine) -> int:
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            now = datetime.now()
+            cursor.execute("""
+                INSERT INTO shipping_lines (name, code, contact, email, gstin, address, variables_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (sl.name, sl.code, sl.contact, sl.email, sl.gstin, sl.address, sl.variables_json, now))
+            conn.commit()
+            return cursor.lastrowid
+
+    def update_shipping_line(self, sl: ShippingLine):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE shipping_lines
+                SET name=?, code=?, contact=?, email=?, gstin=?, address=?, variables_json=?
+                WHERE id=?
+            """, (sl.name, sl.code, sl.contact, sl.email, sl.gstin, sl.address, sl.variables_json, sl.id))
+            conn.commit()
+
+    def delete_shipping_line(self, sl_id: int):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM shipping_lines WHERE id=?", (sl_id,))
             conn.commit()

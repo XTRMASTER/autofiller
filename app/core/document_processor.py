@@ -39,6 +39,12 @@ class DocumentProcessor:
         """
         Scans content against existing variables and creates links for matches.
         """
+        # Clear existing links to prevent duplicates on reload
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM links WHERE template_id=?", (template_id,))
+            conn.commit()
+
         variables = self.db.get_variables()
         links = []
 
@@ -53,7 +59,7 @@ class DocumentProcessor:
                         match_text=var.value,
                         occurrence_index=item.get('index', 0),
                         cell_address=item.get('address'),
-                        paragraph_index=item.get('index') if item.get('type') == 'paragraph' else None
+                        paragraph_index=item.get('index') if item.get('type') in ('paragraph', 'table_cell') else None
                     )
                     link.id = self.db.create_link(link)
                     links.append(link)

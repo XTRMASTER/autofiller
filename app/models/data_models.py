@@ -19,7 +19,6 @@ class Variable:
 
     @staticmethod
     def from_db(row: tuple):
-        # id, name, display_name, value, category, history, created_at, updated_at
         hist = json.loads(row[5]) if row[5] else []
         return Variable(
             id=row[0],
@@ -38,6 +37,7 @@ class Template:
     file_path: str
     file_name: str
     file_type: str
+    shipping_line_id: Optional[int] = None
     linked_variables_json: str = "[]"
 
 @dataclass
@@ -54,5 +54,19 @@ class Link:
 class Job:
     id: Optional[int]
     job_name: str
-    job_date: str
+    shipping_line_id: Optional[int]
+    selected_templates_json: str
     variables_snapshot_json: str
+    job_date: str
+
+@dataclass
+class ShippingLine:
+    id: Optional[int]
+    name: str
+    code: str
+    contact: str
+    email: str
+    gstin: str
+    address: str
+    variables_json: str = "{}"
+    created_at: Optional[datetime] = None

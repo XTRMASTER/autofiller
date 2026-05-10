@@ -3,6 +3,7 @@ from datetime import datetime
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox
+from app.ui.shipping_line_dialogs import ShippingLineDialog, ManageDocumentsDialog
 
 class PresetsPanel(ctk.CTkFrame):
     def __init__(self, master, db, var_manager, parent_window=None):
@@ -33,14 +34,15 @@ class PresetsPanel(ctk.CTkFrame):
         self.sl_list = tk.Listbox(tab1, bg="#2b2b2b", fg="white", selectbackground="#1f538d", borderwidth=0, highlightthickness=0)
         self.sl_list.grid(row=1, column=0, sticky="nsew", padx=2)
 
+        btn_frame1 = ctk.CTkFrame(tab1, fg_color="transparent")
+        btn_frame1.grid(row=2, column=0, pady=5)
+        ctk.CTkButton(btn_frame1, text="+ Add", command=self.add_shipping_line, width=40).pack(side="left", padx=2)
+        ctk.CTkButton(btn_frame1, text="Edit", command=self.edit_shipping_line, width=40).pack(side="left", padx=2)
+        ctk.CTkButton(btn_frame1, text="Docs", command=self.manage_docs, width=40).pack(side="left", padx=2)
+
         ctk.CTkLabel(tab1, text="Customers:").grid(row=0, column=1, sticky="w")
         self.cust_list = tk.Listbox(tab1, bg="#2b2b2b", fg="white", selectbackground="#1f538d", borderwidth=0, highlightthickness=0)
         self.cust_list.grid(row=1, column=1, sticky="nsew", padx=2)
-
-        btn_frame1 = ctk.CTkFrame(tab1, fg_color="transparent")
-        btn_frame1.grid(row=2, column=0, pady=5)
-        ctk.CTkButton(btn_frame1, text="+ Add", command=self.add_shipping_line, width=60).pack(side="left", padx=2)
-        ctk.CTkButton(btn_frame1, text="Load", command=self.load_shipping_line, width=60).pack(side="left", padx=2)
 
         btn_frame2 = ctk.CTkFrame(tab1, fg_color="transparent")
         btn_frame2.grid(row=2, column=1, pady=5)
@@ -66,12 +68,12 @@ class PresetsPanel(ctk.CTkFrame):
         self.cust_list.delete(0, 'end')
         self.jobs_list.delete(0, 'end')
 
+        self.shipping_lines = self.db.get_shipping_lines()
+        for sl in self.shipping_lines:
+            self.sl_list.insert('end', f"{sl.id} - {sl.name}")
+
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, name FROM shipping_lines")
-            for row in cursor.fetchall():
-                self.sl_list.insert('end', f"{row[0]} - {row[1]}")
-
             cursor.execute("SELECT id, name FROM customers")
             for row in cursor.fetchall():
                 self.cust_list.insert('end', f"{row[0]} - {row[1]}")
@@ -85,17 +87,35 @@ class PresetsPanel(ctk.CTkFrame):
         return dialog.get_input()
 
     def add_shipping_line(self):
-        name = self.simple_input("Add Shipping Line", "Enter name:")
-        if name:
+        dialog = ShippingLineDialog(self.winfo_toplevel())
+        self.wait_window(dialog)
+        if dialog.result:
             current_vars = {v.name: v.value for v in self.var_manager.get_all_variables() if v.category == "Shipping Line"}
-            with self.db.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "INSERT INTO shipping_lines (name, variables_json) VALUES (?, ?)",
-                    (name, json.dumps(current_vars))
-                )
-                conn.commit()
+            dialog.result.variables_json = json.dumps(current_vars)
+            self.db.add_shipping_line(dialog.result)
             self.refresh_lists()
+
+    def get_selected_sl(self):
+        selection = self.sl_list.curselection()
+        if not selection: return None
+        item_text = self.sl_list.get(selection[0])
+        sl_id = int(item_text.split(' - ')[0])
+        return next((sl for sl in self.shipping_lines if sl.id == sl_id), None)
+
+    def edit_shipping_line(self):
+        sl = self.get_selected_sl()
+        if not sl: return
+        dialog = ShippingLineDialog(self.winfo_toplevel(), sl)
+        self.wait_window(dialog)
+        if dialog.result:
+            self.db.update_shipping_line(dialog.result)
+            self.refresh_lists()
+
+    def manage_docs(self):
+        sl = self.get_selected_sl()
+        if not sl: return
+        dialog = ManageDocumentsDialog(sl, self.db, self.winfo_toplevel())
+        self.wait_window(dialog)
 
     def add_customer(self):
         name = self.simple_input("Add Customer", "Enter name:")
@@ -115,11 +135,17 @@ class PresetsPanel(ctk.CTkFrame):
         if name:
             current_vars = {v.name: v.value for v in self.var_manager.get_all_variables()}
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            # Capture currently open templates
+            open_template_ids = []
+            if self.parent_window and hasattr(self.parent_window, 'doc_viewer'):
+                open_template_ids = list(self.parent_window.doc_viewer.loaded_templates.keys())
+
             with self.db.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "INSERT INTO jobs (job_name, job_date, variables_snapshot_json) VALUES (?, ?, ?)",
-                    (name, now, json.dumps(current_vars))
+                    "INSERT INTO jobs (job_name, job_date, variables_snapshot_json, selected_templates_json) VALUES (?, ?, ?, ?)",
+                    (name, now, json.dumps(current_vars), json.dumps(open_template_ids))
                 )
                 conn.commit()
             self.refresh_lists()
@@ -153,4 +179,42 @@ class PresetsPanel(ctk.CTkFrame):
         self.load_preset("customers", self.cust_list, "variables_json")
 
     def load_job(self):
-        self.load_preset("jobs", self.jobs_list, "variables_snapshot_json")
+        selection = self.jobs_list.curselection()
+        if not selection: return
+
+        item_text = self.jobs_list.get(selection[0])
+        preset_id = int(item_text.split(' - ')[0])
+
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT variables_snapshot_json, selected_templates_json FROM jobs WHERE id=?", (preset_id,))
+            row = cursor.fetchone()
+
+            if row:
+                vars_json, templates_json = row
+
+                # Restore variables
+                if vars_json:
+                    vars_dict = json.loads(vars_json)
+                    for name, value in vars_dict.items():
+                        var = self.var_manager.find_variable_by_name(name)
+                        if var:
+                            self.var_manager.update_variable_value(var.id, value)
+
+                if self.parent_window and hasattr(self.parent_window, 'var_panel'):
+                    self.parent_window.var_panel.refresh_tree()
+
+                # Restore templates
+                if templates_json and self.parent_window and hasattr(self.parent_window, 'doc_viewer'):
+                    try:
+                        template_ids = json.loads(templates_json)
+                        self.parent_window.doc_viewer.clear_documents()
+                        import os
+                        for tid in template_ids:
+                            templates = self.db.get_templates()
+                            template = next((t for t in templates if t.id == tid), None)
+                            if template and os.path.exists(template.file_path):
+                                self.parent_window.doc_viewer.load_document(template.file_path, template_id=template.id)
+                    except: pass
+
+                messagebox.showinfo("Success", "Loaded Job variables and documents.")
