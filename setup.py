@@ -5,7 +5,7 @@ setup(
     version="1.0.0",
     packages=find_packages(),
     install_requires=[
-        "PyQt6>=6.5.0",
+        "customtkinter==5.2.2",
         "python-docx==0.8.11",
         "openpyxl==3.1.2",
     ],

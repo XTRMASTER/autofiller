@@ -10,7 +10,7 @@ A Python desktop application for Customs House Agents (CHA) to eliminate repetit
 
 ## Tech Stack
 - Python 3.10+
-- PyQt6 (GUI Framework)
+- CustomTkinter (GUI Framework)
 - python-docx (Word processing)
 - openpyxl (Excel processing)
 - SQLite (Local database)
@@ -38,6 +38,6 @@ python app/main.py
 ## Structure
 - `/app`: Main application code.
   - `/core`: Database, logic, and Word/Excel handlers.
-  - `/ui`: PyQt6 UI components.
+  - `/ui`: CustomTkinter UI components.
   - `/models`: Data classes.
   - `/utils`: Helper functions and constants.

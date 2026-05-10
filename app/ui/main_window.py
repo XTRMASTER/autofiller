@@ -1,23 +1,20 @@
-from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QSplitter,
-    QFileDialog, QMessageBox
-)
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction
-
+import customtkinter as ctk
+import tkinter as tk
+from tkinter import filedialog
 from app.core.database import DatabaseManager
 from app.core.variable_manager import VariableManager
 from app.core.document_processor import DocumentProcessor
 from app.ui.variable_panel import VariablePanel
-from app.ui.document_viewer import DocumentViewer
 from app.ui.presets_panel import PresetsPanel
-from app.utils.constants import SUPPORTED_EXTENSIONS
+from app.ui.document_viewer import DocumentViewer
+from app.ui.batch_dialog import BatchProcessDialog
 
-class MainWindow(QMainWindow):
+class MainWindow(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("CHA Document Auto-Fill")
-        self.resize(1200, 800)
+
+        self.title("CHA Document Auto-Fill")
+        self.geometry("1200x800")
 
         # Initialize Core
         self.db = DatabaseManager()
@@ -25,55 +22,62 @@ class MainWindow(QMainWindow):
         self.doc_processor = DocumentProcessor(self.db)
 
         self.init_ui()
-        self.create_menus()
+        self.create_menu()
 
     def init_ui(self):
-        central_widget = QWidget()
-        main_layout = QHBoxLayout(central_widget)
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=3)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
+        # Left Panel (Variables & Presets)
+        self.left_frame = ctk.CTkFrame(self)
+        self.left_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        self.left_frame.grid_rowconfigure(0, weight=1)
+        self.left_frame.grid_rowconfigure(1, weight=1)
+        self.left_frame.grid_columnconfigure(0, weight=1)
 
-        # Left Panel: Variables & Presets
-        left_panel = QWidget()
-        left_layout = QVBoxLayout(left_panel)
+        self.var_panel = VariablePanel(self.left_frame, self.var_manager, on_update_callback=self.on_variable_update)
+        self.var_panel.grid(row=0, column=0, sticky="nsew", pady=(0, 5))
 
-        self.var_panel = VariablePanel(self.var_manager)
-        left_layout.addWidget(self.var_panel)
+        self.presets_panel = PresetsPanel(self.left_frame, self.db, self.var_manager, parent_window=self)
+        self.presets_panel.grid(row=1, column=0, sticky="nsew", pady=(5, 0))
 
-        self.presets_panel = PresetsPanel(self.db, self.var_manager)
-        left_layout.addWidget(self.presets_panel)
+        # Right Panel (Document Viewer)
+        self.doc_viewer = DocumentViewer(self, self.doc_processor, parent_window=self)
+        self.doc_viewer.grid(row=0, column=1, sticky="nsew", padx=(0, 10), pady=10)
 
-        splitter.addWidget(left_panel)
+    def create_menu(self):
+        # CustomTkinter doesn't have a native modern menubar, so we use standard tk.Menu
+        menubar = tk.Menu(self)
 
-        # Center/Right Panel: Document Viewer
-        self.doc_viewer = DocumentViewer(self.doc_processor)
-        splitter.addWidget(self.doc_viewer)
+        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="Open Template...", command=self.open_template, accelerator="Ctrl+O")
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=self.quit)
+        menubar.add_cascade(label="File", menu=file_menu)
 
-        # Connect signals
-        self.var_panel.variable_updated.connect(self.doc_viewer.refresh_links_list)
+        batch_menu = tk.Menu(menubar, tearoff=0)
+        batch_menu.add_command(label="Batch Process...", command=self.open_batch_dialog)
+        menubar.add_cascade(label="Batch", menu=batch_menu)
 
-        splitter.setSizes([300, 900])
-        main_layout.addWidget(splitter)
-        self.setCentralWidget(central_widget)
+        self.config(menu=menubar)
+        self.bind("<Control-o>", lambda e: self.open_template())
 
-    def create_menus(self):
-        menubar = self.menuBar()
-
-        # File Menu
-        file_menu = menubar.addMenu("File")
-
-        open_action = QAction("Open Template...", self)
-        open_action.setShortcut("Ctrl+O")
-        open_action.triggered.connect(self.open_template)
-        file_menu.addAction(open_action)
-
-        exit_action = QAction("Exit", self)
-        exit_action.triggered.connect(self.close)
-        file_menu.addAction(exit_action)
+    def on_variable_update(self):
+        self.doc_viewer.refresh_links_list()
 
     def open_template(self):
-        filters = "Supported Files (*.docx *.xlsx);;Word Documents (*.docx);;Excel Files (*.xlsx)"
-        filepath, _ = QFileDialog.getOpenFileName(self, "Open Template", "", filters)
+        filetypes = (
+            ('Supported Files', '*.docx *.xlsx'),
+            ('Word Documents', '*.docx'),
+            ('Excel Files', '*.xlsx'),
+            ('All files', '*.*')
+        )
+        filepath = filedialog.askopenfilename(title="Open Template", filetypes=filetypes)
 
         if filepath:
             self.doc_viewer.load_document(filepath)
+
+    def open_batch_dialog(self):
+        dialog = BatchProcessDialog(self.db, self.doc_processor, self)
+        self.wait_window(dialog)
