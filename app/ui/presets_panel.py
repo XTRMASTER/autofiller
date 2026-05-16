@@ -215,6 +215,7 @@ class PresetsPanel(ctk.CTkFrame):
                             template = next((t for t in templates if t.id == tid), None)
                             if template and os.path.exists(template.file_path):
                                 self.parent_window.doc_viewer.load_document(template.file_path, template_id=template.id)
-                    except: pass
+                    except Exception as e:
+                        print(f"Error loading documents for Job: {e}")
 
                 messagebox.showinfo("Success", "Loaded Job variables and documents.")
