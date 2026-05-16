@@ -1,0 +1,5 @@
+## 2024-05-16 - Prevent Runtime Crashes from Missing Imports & Silenced Errors
+**Bug/Pattern:** `os` was used in `app/ui/main_window.py` without being imported, which leads to `NameError` at runtime when loading documents for a new shipment. Furthermore, there were multiple `except: pass` blocks which masked underlying errors, making debugging harder and silently failing operations.
+**Root Cause:** Lack of static analysis (linting) integration in development workflow, allowing undefined variables to slip into code and relying on bare `except` blocks for quick and dirty error handling.
+**Fix Applied:** Added `import os` to `app/ui/main_window.py`. Replaced `except: pass` with `except Exception as e: print(f"...")` in `main_window.py` and `presets_panel.py`.
+**Prevention:** Always run linters (like `flake8`) to catch undefined names before committing. Avoid `except: pass` completely; always catch specific exceptions or, at a minimum, log the generic exception to the console to surface failures.
