@@ -12,7 +12,7 @@ class VariableManager:
 
     def get_variables_by_category(self) -> Dict[str, List[Variable]]:
         variables = self.get_all_variables()
-        categorized = {cat: [] for cat in DEFAULT_CATEGORIES}
+        categorized: Dict[str, List[Variable]] = {cat: [] for cat in DEFAULT_CATEGORIES}
 
         for v in variables:
             cat = v.category if v.category in categorized else "Other"

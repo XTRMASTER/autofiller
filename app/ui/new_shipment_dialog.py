@@ -8,10 +8,12 @@ class NewShipmentDialog(ctk.CTkToplevel):
         self.db = db
         self.title("New Import Shipment")
         self.geometry("500x500")
-        if parent: self.transient(parent)
+        if parent:
+            self.transient(parent)
 
-        self.result_sl_id = None
-        self.result_template_ids = []
+        from typing import Optional, List
+        self.result_sl_id: Optional[int] = None
+        self.result_template_ids: List[int] = []
 
         self.shipping_lines = self.db.get_shipping_lines()
         self.sl_options = [f"{sl.id} - {sl.name}" for sl in self.shipping_lines]
@@ -84,8 +86,10 @@ class NewShipmentDialog(ctk.CTkToplevel):
 
     def toggle_all(self, state):
         for cb, _ in self.checkboxes:
-            if state: cb.select()
-            else: cb.deselect()
+            if state:
+                cb.select()
+            else:
+                cb.deselect()
 
     def on_ok(self):
         if not self.sl_combo.get():

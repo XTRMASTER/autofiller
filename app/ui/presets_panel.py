@@ -97,14 +97,16 @@ class PresetsPanel(ctk.CTkFrame):
 
     def get_selected_sl(self):
         selection = self.sl_list.curselection()
-        if not selection: return None
+        if not selection:
+            return None
         item_text = self.sl_list.get(selection[0])
         sl_id = int(item_text.split(' - ')[0])
         return next((sl for sl in self.shipping_lines if sl.id == sl_id), None)
 
     def edit_shipping_line(self):
         sl = self.get_selected_sl()
-        if not sl: return
+        if not sl:
+            return
         dialog = ShippingLineDialog(self.winfo_toplevel(), sl)
         self.wait_window(dialog)
         if dialog.result:
@@ -113,7 +115,8 @@ class PresetsPanel(ctk.CTkFrame):
 
     def manage_docs(self):
         sl = self.get_selected_sl()
-        if not sl: return
+        if not sl:
+            return
         dialog = ManageDocumentsDialog(sl, self.db, self.winfo_toplevel())
         self.wait_window(dialog)
 
@@ -152,7 +155,8 @@ class PresetsPanel(ctk.CTkFrame):
 
     def load_preset(self, table, listbox, col_name):
         selection = listbox.curselection()
-        if not selection: return
+        if not selection:
+            return
 
         item_text = listbox.get(selection[0])
         preset_id = int(item_text.split(' - ')[0])
@@ -180,7 +184,8 @@ class PresetsPanel(ctk.CTkFrame):
 
     def load_job(self):
         selection = self.jobs_list.curselection()
-        if not selection: return
+        if not selection:
+            return
 
         item_text = self.jobs_list.get(selection[0])
         preset_id = int(item_text.split(' - ')[0])

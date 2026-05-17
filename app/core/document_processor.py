@@ -1,10 +1,9 @@
 import os
-import json
-from typing import List, Dict, Tuple
+from typing import List, Tuple
 from app.core.database import DatabaseManager
 from app.core.word_handler import WordHandler
 from app.core.excel_handler import ExcelHandler
-from app.models.data_models import Template, Link, Variable
+from app.models.data_models import Template, Link
 
 class DocumentProcessor:
     def __init__(self, db: DatabaseManager):
@@ -51,7 +50,7 @@ class DocumentProcessor:
         for item in content:
             text = item.get('text', '')
             for var in variables:
-                if var.value and var.value in text:
+                if var.value and var.value in text and var.id is not None:
                     link = Link(
                         id=None,
                         template_id=template_id,

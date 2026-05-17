@@ -3,6 +3,7 @@ import customtkinter as ctk
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from app.ui.extractor_dialog import ExtractorDialog
+import threading
 
 class DocumentTab(ctk.CTkFrame):
     def __init__(self, master, template, content, links):
@@ -32,7 +33,7 @@ class DocumentTab(ctk.CTkFrame):
         self.word_view.configure(state="normal")
         self.word_view.delete("1.0", "end")
 
-        link_texts = [l.match_text for l in self.links]
+        link_texts = [link.match_text for link in self.links]
 
         for item in self.content:
             text = item.get('text', '')
@@ -44,7 +45,8 @@ class DocumentTab(ctk.CTkFrame):
             start_idx = "1.0"
             while True:
                 start_idx = self.word_view.search(lt, start_idx, stopindex="end")
-                if not start_idx: break
+                if not start_idx:
+                    break
                 end_idx = f"{start_idx}+{len(lt)}c"
                 self.word_view.tag_add("highlight", start_idx, end_idx)
                 start_idx = end_idx
@@ -55,7 +57,7 @@ class DocumentTab(ctk.CTkFrame):
         for item in self.excel_view.get_children():
             self.excel_view.delete(item)
 
-        link_texts = [l.match_text for l in self.links]
+        link_texts = [link.match_text for link in self.links]
 
         for item in self.content:
             text = item.get('text', '')
@@ -131,7 +133,8 @@ class DocumentViewer(ctk.CTkFrame):
             else:
                 # If loading from DB by ID, we still need to scan the content
                 template = next((t for t in self.doc_processor.db.get_templates() if t.id == template_id), None)
-                if not template: raise ValueError("Template not found in DB")
+                if not template:
+                    raise ValueError("Template not found in DB")
 
                 if template.file_type == '.docx':
                     from app.core.word_handler import WordHandler
@@ -169,7 +172,8 @@ class DocumentViewer(ctk.CTkFrame):
 
     def refresh_links_list(self):
         self.link_list.delete(0, 'end')
-        if not self.loaded_templates: return
+        if not self.loaded_templates:
+            return
 
         variables = {v.id: v for v in self.doc_processor.db.get_variables()}
         displayed_vars = set()
@@ -184,14 +188,16 @@ class DocumentViewer(ctk.CTkFrame):
 
     def extract_values(self):
         current_tab_name = self.tabs.get()
-        if not current_tab_name: return
+        if not current_tab_name:
+            return
 
         tab_frame = self.tabs.tab(current_tab_name)
         # Find DocumentTab child
         doc_tab = next(iter(tab_frame.winfo_children()))
         text = doc_tab.get_text()
 
-        if not text.strip(): return
+        if not text.strip():
+            return
 
         dialog = ExtractorDialog(text, self.parent_window.var_manager, self.winfo_toplevel())
         self.wait_window(dialog)
@@ -201,34 +207,44 @@ class DocumentViewer(ctk.CTkFrame):
         self.refresh_links_list()
 
     def apply_variables(self):
-        if not self.loaded_templates: return
+        if not self.loaded_templates:
+            return
 
         output_dir = filedialog.askdirectory(title="Select Output Directory")
-        if not output_dir: return
+        if not output_dir:
+            return
 
         job_prefix = ""
         # Ask for job prefix
         from customtkinter import CTkInputDialog
         dialog = CTkInputDialog(text="Enter an optional Job ID/Prefix for saved files (leave blank for none):", title="Job Prefix")
         job_prefix = dialog.get_input() or ""
-        if job_prefix: job_prefix += "_"
+        if job_prefix:
+            job_prefix += "_"
 
-        success_count = 0
-        for tid, template in self.loaded_templates.items():
-            try:
-                # Custom apply logic to handle custom filenames directly in processor isn't clean without refactoring processor.
-                # Since DocumentProcessor.apply_variables_to_template handles output, we will let it save as Updated_...
-                # and then rename it.
-                out_path = self.doc_processor.apply_variables_to_template(tid, output_dir)
+        self.apply_btn.configure(state="disabled", text="Processing...")
 
-                if out_path and os.path.exists(out_path):
-                    if job_prefix:
-                        new_name = job_prefix + template.file_name
-                        new_path = os.path.join(output_dir, new_name)
-                        if os.path.exists(new_path): os.remove(new_path)
-                        os.rename(out_path, new_path)
-                    success_count += 1
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to apply to {template.file_name}:\n{e}")
+        def worker():
+            success_count = 0
+            for tid, template in self.loaded_templates.items():
+                try:
+                    # Custom apply logic to handle custom filenames directly in processor isn't clean without refactoring processor.
+                    # Since DocumentProcessor.apply_variables_to_template handles output, we will let it save as Updated_...
+                    # and then rename it.
+                    out_path = self.doc_processor.apply_variables_to_template(tid, output_dir)
 
-        messagebox.showinfo("Success", f"Successfully processed and saved {success_count} documents.")
+                    if out_path and os.path.exists(out_path):
+                        if job_prefix:
+                            new_name = job_prefix + template.file_name
+                            new_path = os.path.join(output_dir, new_name)
+                            if os.path.exists(new_path):
+                                os.remove(new_path)
+                            os.rename(out_path, new_path)
+                        success_count += 1
+                except Exception as e:
+                    self.after(0, lambda err=e, fname=template.file_name: messagebox.showerror("Error", f"Failed to apply to {fname}:\n{err}"))
+
+            self.after(0, lambda: messagebox.showinfo("Success", f"Successfully processed and saved {success_count} documents."))
+            self.after(0, lambda: self.apply_btn.configure(state="normal", text="Apply Variables & Save All"))
+
+        threading.Thread(target=worker, daemon=True).start()
