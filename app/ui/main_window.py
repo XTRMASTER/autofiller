@@ -133,7 +133,8 @@ class MainWindow(ctk.CTk):
                     vars_dict = json.loads(sl.variables_json)
                     for name, value in vars_dict.items():
                         var = self.var_manager.find_variable_by_name(name)
-                        if var: self.var_manager.update_variable_value(var.id, value)
+                        if var:
+                            self.var_manager.update_variable_value(var.id, value)
                 except Exception as e:
                     print(f"Error loading custom variables for shipping line: {e}")
 

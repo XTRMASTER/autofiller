@@ -14,3 +14,21 @@ The custom title bar wasn't showing in the UI, and the sidebar accent color was 
 
 **Prevention:**
 Thoroughly test new components to ensure they appear as expected on-screen instead of just validating the logic via tests or code analyzers. Always link the UI elements back to the single source of truth for theming to avoid hardcoded defaults taking precedence over user settings.
+
+## 2026-05-17 - Unblocking UI Threads & Preserving Document Formatting
+
+**Bug/Pattern:**
+1. The Tkinter GUI would completely freeze during batch processing or when applying variables to multiple documents because the file operations were blocking the main event loop.
+2. Replacing text variables in `.docx` templates was destroying original font styling (colors, boldness, etc.) because it reconstructed paragraphs entirely from scratch.
+
+**Root Cause:**
+1. Running CPU-bound and I/O-bound synchronous iteration over templates inside Tkinter callbacks instead of background threads.
+2. The `_replace_in_paragraph` logic inside `app/core/word_handler.py` was clearing all native `Run` objects and converting the updated text into a single raw unstyled string run.
+
+**Fix Applied:**
+1. Offloaded loops calling `apply_variables_to_template` into `threading.Thread(daemon=True)` worker threads. Progress and UI feedback are now passed back safely via `self.after(0, ...)`.
+2. Modified the text replacement algorithm to iterate and apply replacements at the individual `run.text` level, preserving all existing text styles within the document.
+
+**Prevention:**
+1. Any iterative loop performing file parsing or writing inside a UI framework must run in an asynchronous or threaded context to ensure the application remains responsive.
+2. When parsing and modifying structured document formats like Word/Excel, favor incremental mutations on existing node elements over destructive rebuilding to retain original layout properties.

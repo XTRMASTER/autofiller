@@ -1,9 +1,8 @@
 import sqlite3
-import json
 from datetime import datetime
 from typing import List, Optional
 from app.utils.constants import DB_FILE
-from app.models.data_models import Variable, Template, Link, Job, ShippingLine
+from app.models.data_models import Variable, Template, Link, ShippingLine
 
 class DatabaseManager:
     def __init__(self, db_path: str = DB_FILE):

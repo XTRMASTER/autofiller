@@ -1,15 +1,17 @@
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import os
-import json
 from app.models.data_models import ShippingLine, Template
 
+from typing import Optional
+
 class ShippingLineDialog(ctk.CTkToplevel):
-    def __init__(self, parent=None, sl: ShippingLine = None):
+    def __init__(self, parent=None, sl: Optional[ShippingLine]=None):
         super().__init__(parent)
         self.title("Shipping Line Details")
         self.geometry("450x400")
-        if parent: self.transient(parent)
+        if parent:
+            self.transient(parent)
 
         self.result = None
         self.sl = sl
@@ -56,7 +58,8 @@ class ManageDocumentsDialog(ctk.CTkToplevel):
         self.db = db
         self.title(f"Manage Documents - {sl.name}")
         self.geometry("500x400")
-        if parent: self.transient(parent)
+        if parent:
+            self.transient(parent)
 
         self.init_ui()
         self.load_docs()
@@ -99,7 +102,8 @@ class ManageDocumentsDialog(ctk.CTkToplevel):
 
     def remove_doc(self):
         selection = self.listbox.curselection()
-        if not selection: return
+        if not selection:
+            return
         item_text = self.listbox.get(selection[0])
         tid = int(item_text.split(' - ')[0])
 

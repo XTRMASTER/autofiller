@@ -1,6 +1,7 @@
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import filedialog, messagebox
+import threading
 
 class BatchProcessDialog(ctk.CTkToplevel):
     def __init__(self, db, doc_processor, parent=None):
@@ -48,22 +49,27 @@ class BatchProcessDialog(ctk.CTkToplevel):
             return
 
         output_dir = filedialog.askdirectory(title="Select Output Directory")
-        if not output_dir: return
+        if not output_dir:
+            return
 
         items = [self.listbox.get(i) for i in selection]
         template_ids = [int(item.split(' - ')[0]) for item in items]
 
         total = len(template_ids)
-        success_count = 0
 
-        for i, tid in enumerate(template_ids):
-            try:
-                self.doc_processor.apply_variables_to_template(tid, output_dir)
-                success_count += 1
-            except Exception as e:
-                print(f"Failed to process {tid}: {e}")
+        self.progress.set(0)
 
-            self.progress.set((i + 1) / total)
-            self.update_idletasks()
+        def worker():
+            success_count = 0
+            for i, tid in enumerate(template_ids):
+                try:
+                    self.doc_processor.apply_variables_to_template(tid, output_dir)
+                    success_count += 1
+                except Exception as e:
+                    print(f"Failed to process {tid}: {e}")
 
-        messagebox.showinfo("Complete", f"Successfully processed {success_count} of {total} templates.")
+                self.after(0, lambda progress=(i + 1) / total: self.progress.set(progress))
+
+            self.after(0, lambda: messagebox.showinfo("Complete", f"Successfully processed {success_count} of {total} templates."))
+
+        threading.Thread(target=worker, daemon=True).start()

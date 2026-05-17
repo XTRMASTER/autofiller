@@ -14,7 +14,8 @@ class ExtractorDialog(ctk.CTkToplevel):
         if parent:
             self.transient(parent)
 
-        self.extracted_data = {}
+        from typing import Dict
+        self.extracted_data: Dict[str, str] = {}
         self.init_ui()
         self.extract()
 
@@ -46,7 +47,8 @@ class ExtractorDialog(ctk.CTkToplevel):
 
     def add_selected(self):
         selection = self.listbox.curselection()
-        if not selection: return
+        if not selection:
+            return
 
         idx = selection[0]
         data = self.items_data[idx]
