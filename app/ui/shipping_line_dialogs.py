@@ -1,7 +1,6 @@
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import os
-import json
 from app.models.data_models import ShippingLine, Template
 
 class ShippingLineDialog(ctk.CTkToplevel):
